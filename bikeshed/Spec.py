@@ -211,7 +211,7 @@ class Spec:
     def assembleDocument(self) -> Spec:
         self.initMetadata(self.inputContent)
         self.recordDependencies(self.inputSource)
-        self.lines = self.earlyParse(self.inputContent)
+        self.lines = self.inputContent.lines
 
         # Remove the metadata
         # FIXME: This should be done the first time I parse metadata.
@@ -231,14 +231,14 @@ class Spec:
         self.lines = datablocks.transformDataBlocks(self, self.lines)
         if self.debug:
             print("".join(x.text for x in self.lines))  # noqa: T201
-        markdownFeatures: set[str] = {"headings"}
-        self.lines = markdown.parse(
-            self.lines,
-            self.md.indent,
-            opaqueElements=self.md.opaqueElements,
-            blockElements=self.md.blockElements,
-            features=markdownFeatures,
-        )
+        # markdownFeatures: set[str] = {"headings"}
+        # self.lines = markdown.parse(
+        #     self.lines,
+        #     self.md.indent,
+        #     opaqueElements=self.md.opaqueElements,
+        #     blockElements=self.md.blockElements,
+        #     features=markdownFeatures,
+        # )
 
         self.refs.setSpecData(self)
 
@@ -247,7 +247,7 @@ class Spec:
         boilerplate.addHeaderFooter(self)
 
         # Build the document
-        self.document, self.head, self.body = h.parseDocument(self.html, self.structuralNodes)
+        self.document, self.head, self.body = h.parseDocument(self.html)
         u.correctFrontMatter(self)
         includes.processInclusions(self)
         metadata.parseDoc(self)
@@ -276,11 +276,11 @@ class Spec:
         boilerplate.removeUnwantedBoilerplate(self)
         shorthands.run(self)
         inlineTags.processTags(self)
-        u.canonicalizeShortcuts(self.body)
+        # u.canonicalizeShortcuts(self.body)
         u.addImplicitAlgorithms(self)
         u.fixManualDefTables(self)
         headings.processHeadings(self)
-        u.checkVarHygiene(self)
+        # u.checkVarHygiene(self)
         u.processIssuesAndExamples(self)
         idl.markupIDL(self)
         cddl.markupCDDL(self)
@@ -298,7 +298,7 @@ class Spec:
         u.processAutolinks(self)
         u.fixInterDocumentReferences(self)
         biblio.dedupBiblioReferences(self)
-        boilerplate.addIndexSection(self)
+        # boilerplate.addIndexSection(self)
         boilerplate.addExplicitIndexes(self)
         boilerplate.addStyles(self)
         boilerplate.addReferencesSection(self)
@@ -310,13 +310,13 @@ class Spec:
         headings.processHeadings(self, "all")  # again
         boilerplate.removeUnwantedBoilerplate(self)
         boilerplate.addTOCSection(self)
-        u.addSelfLinks(self)
+        # u.addSelfLinks(self)
         u.processAutolinks(self)
         boilerplate.removeUnwantedBoilerplate(self)
         # Add MDN panels after all IDs/anchors have been added
         mdn.addMdnPanels(self)
         caniuse.addCanIUsePanels(self)
-        highlight.addSyntaxHighlighting(self)
+        # highlight.addSyntaxHighlighting(self)
         boilerplate.addBikeshedBoilerplate(self)
         boilerplate.addDarkmodeIndicators(self)
         fingerprinting.addTrackingVector(self)
@@ -330,10 +330,10 @@ class Spec:
         lint.accidental2119(self)
         lint.missingExposed(self)
         lint.requiredIDs(self)
-        lint.unusedInternalDfns(self)
+        # lint.unusedInternalDfns(self)
 
         # Any final HTML cleanups
-        u.cleanupHTML(self)
+        # u.cleanupHTML(self)
         if self.md.prepTR:
             # Don't try and override the W3C's icon.
             for el in h.findAll("[rel ~= 'icon']", self):
