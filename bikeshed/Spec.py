@@ -59,10 +59,12 @@ class Spec:
         lineNumbers: bool = False,
         fileRequester: retrieve.DataFileRequester | None = None,
         testing: bool = False,
+        detectLinkErrors: str | None = None,
     ) -> None:
         catchArgparseBug(inputFilename)
         self.valid: bool = False
         self.lineNumbers: bool = lineNumbers
+        self.detectLinkErrors: str | None = detectLinkErrors
         if lineNumbers:
             # line-numbers are too hacky, so force this to be a dry run
             constants.dryRun = True
@@ -292,6 +294,8 @@ class Spec:
         dfns.annotateDfns(self)
         u.formatArgumentdefTables(self)
         u.formatElementdefTables(self)
+        if self.detectLinkErrors:
+            u.prepareLinkErrorDetection(self)
         u.processAutolinks(self)
         u.fixInterDocumentReferences(self)
         biblio.dedupBiblioReferences(self)
@@ -328,6 +332,8 @@ class Spec:
         lint.missingExposed(self)
         lint.requiredIDs(self)
         lint.unusedInternalDfns(self)
+        if self.detectLinkErrors:
+            u.verifyLinks(self)
 
         if self.debugPrint == "final":
             print(h.printNodeTree(self.document))  # noqa: T201

@@ -1641,3 +1641,157 @@ def processCDDL(doc: t.SpecT) -> None:
     classifyDfns(doc, dfns)
     h.fixupIDs(doc, dfns)
     doc.refs.addLocalDfns(doc, (dfn for dfn in dfns if dfn.get("id") is not None))
+
+
+def prepareLinkErrorDetection(doc: t.SpecT) -> None:
+    # Find all elements with data-x-lt
+    for el in list(h.findAll("[data-x-lt]", doc)):
+        xLt = el.get("data-x-lt")
+
+        aEl = None
+        if el.tag == "a":
+            aEl = el
+        else:
+            aEls = h.findAll("a", el)
+            if aEls:
+                aEl = aEls[0]
+                aEl.set("data-x-lt", xLt)
+                del el.attrib["data-x-lt"]
+
+        if aEl is not None:
+            href = aEl.get("href")
+            if href:
+                aEl.set("data-original-href", href)
+                del aEl.attrib["href"]
+        else:
+            if not hasattr(doc, "xrefsUnlinkedSource"):
+                doc.xrefsUnlinkedSource = []
+            doc.xrefsUnlinkedSource.append(el)
+
+
+def normalizeUrl(url: str, base: str = "https://html.spec.whatwg.org/") -> str:
+    if url.startswith("#"):
+        return base + url
+    joined = parse.urljoin(base, url)
+    if joined.startswith("https://html.spec.whatwg.org/multipage/"):
+        parsed = parse.urlparse(joined)
+        return "https://html.spec.whatwg.org/#" + parsed.fragment
+    return joined
+
+
+def verifyLinks(doc: t.SpecT) -> None:
+    if not doc.detectLinkErrors:
+        return
+
+    logPath = doc.detectLinkErrors
+
+    dataXToDfn = {}
+    for el in h.findAll("[data-x]", doc):
+        val = el.get("data-x")
+        if val:
+            dataXToDfn[val] = el
+
+    ids = h.collectIds(doc.document)
+    usedDataX = set()
+    errors = []
+
+    def getLine(el):
+        return h.approximateLineNumber(el)
+
+    def getSuggestion(targetEl) -> str:
+        dfnFor = targetEl.get("data-dfn-for")
+        lt = h.textContent(targetEl).strip()
+        parts = []
+        if dfnFor:
+            parts.append(f"for=\"{dfnFor}\"")
+        parts.append(f"lt=\"{lt}\"")
+        return " ".join(parts)
+
+    # Find all processed links
+    linksToCheck = h.findAll("a[data-original-href], u.link-error[data-original-href]", doc)
+
+    for el in linksToCheck:
+        origHref = el.get("data-original-href")
+        xLt = el.get("data-x-lt")
+        line = getLine(el)
+
+        normalizedOrig = normalizeUrl(origHref)
+
+        if h.hasClass(doc, el, "link-error"):
+            errTitle = el.get("title") or ""
+            suggestion = ""
+            targetEl = dataXToDfn.get(xLt)
+            if targetEl is not None:
+                suggestion = getSuggestion(targetEl)
+            errors.append(
+                f"LINE: {line} | TYPE: unresolved | MSG: Failed to resolve '{xLt}': {errTitle} | ORIG: {origHref} | SUGG: {suggestion}"
+            )
+            continue
+
+        resolvedHref = el.get("href")
+        normalizedResolved = normalizeUrl(resolvedHref)
+
+        if normalizedOrig != normalizedResolved:
+            suggestion = ""
+            targetEl = dataXToDfn.get(xLt)
+            if targetEl is not None:
+                suggestion = getSuggestion(targetEl)
+            errors.append(
+                f"LINE: {line} | TYPE: mismatch | MSG: URL mismatch for '{xLt}': original {origHref} vs resolved {resolvedHref} | SUGG: {suggestion}"
+            )
+            continue
+
+        if resolvedHref.startswith("#"):
+            targetId = resolvedHref[1:]
+            targetEl = ids.get(targetId)
+            if targetEl is not None:
+                targetDataX = targetEl.get("data-x")
+                if targetDataX:
+                    if targetDataX != xLt:
+                        suggestion = getSuggestion(targetEl)
+                        errors.append(
+                            f"LINE: {line} | TYPE: mismatch | MSG: Target data-x mismatch for '{xLt}': target has '{targetDataX}' | SUGG: {suggestion}"
+                        )
+                    else:
+                        usedDataX.add(xLt)
+                else:
+                    errors.append(
+                        f"LINE: {line} | TYPE: annotation-mismatch | MSG: Target #{targetId} has no data-x attribute for link '{xLt}'"
+                    )
+            else:
+                errors.append(
+                    f"LINE: {line} | TYPE: broken-link | MSG: Resolved target #{targetId} not found in document for link '{xLt}'"
+                )
+
+    # Log unprocessed links
+    for el in h.findAll("a[data-original-href]", doc):
+        if not el.get("href") and not h.hasClass(doc, el, "link-error"):
+            line = getLine(el)
+            xLt = el.get("data-x-lt")
+            origHref = el.get("data-original-href")
+            errors.append(
+                f"LINE: {line} | TYPE: unprocessed | MSG: Link '{xLt}' was not processed by Bikeshed | ORIG: {origHref}"
+            )
+
+    # Log elements with data-x-lt that didn't have <a>
+    if hasattr(doc, "xrefsUnlinkedSource"):
+        for el in doc.xrefsUnlinkedSource:
+            line = getLine(el)
+            xLt = el.get("data-x-lt")
+            errors.append(
+                f"LINE: {line} | TYPE: unlinked-source | MSG: Element with data-x-lt='{xLt}' has no <a> child"
+            )
+
+    # Log unused data-x
+    unusedDataX = set(dataXToDfn.keys()) - usedDataX
+    for x in sorted(unusedDataX):
+        el = dataXToDfn[x]
+        line = getLine(el)
+        errors.append(
+            f"LINE: {line} | TYPE: unused-dfn | MSG: Definition '{x}' was never linked to"
+        )
+
+    # Write to log file
+    with open(logPath, "w", encoding="utf-8") as f:
+        for err in errors:
+            f.write(err + "\n")

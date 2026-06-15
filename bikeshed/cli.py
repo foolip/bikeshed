@@ -105,6 +105,12 @@ def main() -> None:
         action="store_true",
         help="Allow some features to execute arbitrary code from outside the Bikeshed codebase.",
     )
+    argparser.add_argument(
+        "--detect-link-errors",
+        dest="detectLinkErrors",
+        default=None,
+        help="Detect link errors and log them to the specified file.",
+    )
 
     subparsers = argparser.add_subparsers(title="Subcommands", dest="subparserName")
 
@@ -549,6 +555,7 @@ def handleSpec(options: argparse.Namespace, extras: list[str]) -> None:
         debugPrint=options.debugPrint,
         token=options.ghToken,
         lineNumbers=options.lineNumbers,
+        detectLinkErrors=options.detectLinkErrors,
     )
     if not doc.valid:
         m.die("Spec is in an invalid state; exitting.")
